@@ -37,12 +37,14 @@ import com.google.devtools.build.lib.rules.python.PyCommon;
 import com.google.devtools.build.lib.rules.python.PyRuleClasses;
 import com.google.devtools.build.lib.rules.python.PythonVersion;
 import com.google.devtools.build.lib.util.FileType;
+import com.google.devtools.build.lib.util.FileTypeSet;
 
 /**
  * Bazel-specific rule definitions for Python rules.
  */
 public final class BazelPyRuleClasses {
   public static final FileType PYTHON_SOURCE = FileType.of(".py");
+  public static final String DEFAULT_PY_STUB_TEMPLATE = "//tools/python:python_stub_template.txt";
 
   public static final LabelLateBoundDefault<?> PY_INTERPRETER =
       LabelLateBoundDefault.fromTargetConfiguration(
@@ -108,6 +110,14 @@ public final class BazelPyRuleClasses {
           .add(attr("srcs_version", STRING)
               .value(PythonVersion.defaultSrcsVersion().toString())
               .allowedValues(new AllowedValueSet(PythonVersion.getAllValues())))
+          /* <!-- #BLAZE_RULE($base_py).ATTRIBUTE(stub_template) -->
+          The label set here replaces the default template file that is used as
+          the entrypoint for the binary in bazel-bin/
+          <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
+          .add(attr("stub_template", LABEL)
+              .cfg(HostTransition.INSTANCE)
+              .value(env.getToolsLabel(DEFAULT_PY_STUB_TEMPLATE))
+              .allowedFileTypes(FileTypeSet.ANY_FILE))
           // TODO(brandjon): Consider adding to py_interpreter a .mandatoryNativeProviders() of
           // BazelPyRuntimeProvider. (Add a test case to PythonConfigurationTest for violations
           // of this requirement.)

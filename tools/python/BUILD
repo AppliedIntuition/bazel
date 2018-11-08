@@ -11,6 +11,7 @@ filegroup(
         # Tools are build from the workspace for tests.
         "2to3.sh",
         "BUILD",
+        "python_stub_template.txt",
     ],
     visibility = ["//visibility:private"],
 )

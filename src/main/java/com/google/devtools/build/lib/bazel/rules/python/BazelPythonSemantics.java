@@ -58,8 +58,6 @@ import java.util.List;
  * Functionality specific to the Python rules in Bazel.
  */
 public class BazelPythonSemantics implements PythonSemantics {
-  private static final Template STUB_TEMPLATE =
-      Template.forResource(BazelPythonSemantics.class, "python_stub_template.txt");
   public static final InstrumentationSpec PYTHON_COLLECTION_SPEC = new InstrumentationSpec(
       FileTypeSet.of(BazelPyRuleClasses.PYTHON_SOURCE),
       "srcs", "deps", "data");
@@ -135,6 +133,7 @@ public class BazelPythonSemantics implements PythonSemantics {
     BazelPythonConfiguration config = ruleContext.getFragment(BazelPythonConfiguration.class);
     String pythonBinary = getPythonBinary(ruleContext, config);
 
+    Artifact stubTemplateArtifact = ruleContext.getPrerequisiteArtifact("stub_template", Mode.HOST);
     if (!ruleContext.getFragment(PythonConfiguration.class).buildPythonZip()) {
       Artifact stubOutput = executable;
       if (OS.getCurrent() == OS.WINDOWS) {
@@ -147,8 +146,8 @@ public class BazelPythonSemantics implements PythonSemantics {
       ruleContext.registerAction(
           new TemplateExpansionAction(
               ruleContext.getActionOwner(),
+              stubTemplateArtifact,
               stubOutput,
-              STUB_TEMPLATE,
               ImmutableList.of(
                   Substitution.of("%main%", main),
                   Substitution.of("%python_binary%", pythonBinary),
@@ -165,8 +164,8 @@ public class BazelPythonSemantics implements PythonSemantics {
       ruleContext.registerAction(
           new TemplateExpansionAction(
               ruleContext.getActionOwner(),
+              stubTemplateArtifact,
               templateMain,
-              STUB_TEMPLATE,
               ImmutableList.of(
                   Substitution.of("%main%", main),
                   Substitution.of("%python_binary%", pythonBinary),
