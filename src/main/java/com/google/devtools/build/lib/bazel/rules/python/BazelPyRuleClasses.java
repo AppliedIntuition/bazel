@@ -138,7 +138,7 @@ public final class BazelPyRuleClasses {
           <!-- #END_BLAZE_RULE.ATTRIBUTE --> */
           .add(
               attr("stub_template", LABEL)
-                  .cfg(HostTransition.INSTANCE)
+                  .cfg(HostTransition.createFactory())
                   .value(env.getToolsLabel(DEFAULT_PY_STUB_TEMPLATE))
                   .allowedFileTypes(FileTypeSet.ANY_FILE))
           // do not depend on lib2to3:2to3 rule, because it creates circular dependencies
