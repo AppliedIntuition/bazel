@@ -527,11 +527,6 @@ def configure_unix_toolchain(repository_ctx, cpu_value, overriden_tools):
             ) + _add_linker_option_if_supported(
                 repository_ctx,
                 cc,
-                "-Wl,-no-as-needed",
-                "-no-as-needed",
-            ) + _add_linker_option_if_supported(
-                repository_ctx,
-                cc,
                 "-Wl,-z,relro,-z,now",
                 "-z",
             ) + (
