@@ -66,14 +66,14 @@ CcSharedLibraryInfo = provider(
 def _separate_static_and_dynamic_link_libraries(
         direct_children,
         can_be_linked_dynamically,
-        preloaded_deps_direct_labels):
+        preloaded_deps_direct_labels
+    ):
     node = None
     all_children = list(direct_children)
     link_statically_labels = {}
     link_dynamically_labels = {}
 
     seen_labels = {}
-
     # Horrible I know. Perhaps Starlark team gives me a way to prune a tree.
     for i in range(2147483647):
         if i == len(all_children):
@@ -130,6 +130,7 @@ def _build_exports_map_from_only_dynamic_deps(merged_shared_library_infos):
                      " and " + linker_input.libraries[0].dynamic_library.short_path +
                      " export " + export)
             exports_map[export] = linker_input
+
     return exports_map
 
 def _build_link_once_static_libs_map(merged_shared_library_infos):
@@ -210,7 +211,7 @@ def _check_if_target_should_be_exported_without_filter(target, current_label, pe
 
 def _check_if_target_should_be_exported_with_filter(target, current_label, exports_filter, permissions):
     should_be_exported = False
-    if exports_filter == None:
+    if exports_filter == None or "*" in exports_filter:
         should_be_exported = True
     else:
         for export_filter in exports_filter:
@@ -262,6 +263,13 @@ def _filter_inputs(
         can_be_linked_dynamically,
         preloaded_deps_direct_labels,
     )
+
+
+    # Bug Patch: Assume linker inputs that are not in the dynamic or static labels are pulled in statically. 
+    for linker_input in dependency_linker_inputs:
+        if str(linker_input.owner) not in link_dynamically_labels and str(linker_input.owner) not in link_statically_labels and str(linker_input.owner).endswith(".upb"):
+            # print("WARNING: ", str(linker_input.owner), " is not caught by the GraphNodeInfo Aspect")
+            link_statically_labels[str(linker_input.owner)] = True
 
     precompiled_only_dynamic_libraries = []
     unaccounted_for_libs = []
@@ -549,7 +557,6 @@ def _graph_structure_aspect_impl(target, ctx):
         for tag in ctx.rule.attr.tags:
             if tag == LINKABLE_MORE_THAN_ONCE:
                 linkable_more_than_once = True
-
     return [GraphNodeInfo(
         label = ctx.label,
         children = children,
