@@ -78,11 +78,12 @@ public final class PyRuntime implements RuleConfiguredTargetFactory {
       return null;
     }
     Preconditions.checkState(pythonVersion.isTargetValue());
+    Artifact bootstrapTemplate = ruleContext.getPrerequisiteArtifact("bootstrap_template");
 
     PyRuntimeInfo provider =
         hermetic
-            ? PyRuntimeInfo.createForInBuildRuntime(interpreter, files, pythonVersion, stubShebang)
-            : PyRuntimeInfo.createForPlatformRuntime(interpreterPath, pythonVersion, stubShebang);
+            ? PyRuntimeInfo.createForInBuildRuntime(interpreter, files, pythonVersion, stubShebang, bootstrapTemplate)
+            : PyRuntimeInfo.createForPlatformRuntime(interpreterPath, pythonVersion, stubShebang, bootstrapTemplate);
 
     return new RuleConfiguredTargetBuilder(ruleContext)
         .setFilesToBuild(files)

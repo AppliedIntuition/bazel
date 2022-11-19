@@ -32,6 +32,7 @@ import net.starlark.java.eval.EvalException;
 import net.starlark.java.eval.Starlark;
 import net.starlark.java.eval.StarlarkThread;
 import net.starlark.java.syntax.Location;
+import com.google.devtools.build.lib.analysis.configuredtargets.InputFileConfiguredTarget;
 
 /**
  * Instance of the provider type that describes Python runtimes.
@@ -60,6 +61,7 @@ public final class PyRuntimeInfo implements Info, PyRuntimeInfoApi<Artifact> {
   private final PythonVersion pythonVersion;
 
   private final String stubShebang;
+  @Nullable private final Artifact bootstrapTemplate;
 
   private PyRuntimeInfo(
       @Nullable Location location,
@@ -67,7 +69,8 @@ public final class PyRuntimeInfo implements Info, PyRuntimeInfoApi<Artifact> {
       @Nullable Artifact interpreter,
       @Nullable Depset files,
       PythonVersion pythonVersion,
-      @Nullable String stubShebang) {
+      @Nullable String stubShebang,
+      @Nullable Artifact bootstrapTemplate) {
     Preconditions.checkArgument((interpreterPath == null) != (interpreter == null));
     Preconditions.checkArgument((interpreter == null) == (files == null));
     Preconditions.checkArgument(pythonVersion.isTargetValue());
@@ -81,6 +84,7 @@ public final class PyRuntimeInfo implements Info, PyRuntimeInfoApi<Artifact> {
     } else {
       this.stubShebang = PyRuntimeInfoApi.DEFAULT_STUB_SHEBANG;
     }
+    this.bootstrapTemplate = bootstrapTemplate;
   }
 
   @Override
@@ -98,26 +102,32 @@ public final class PyRuntimeInfo implements Info, PyRuntimeInfoApi<Artifact> {
       Artifact interpreter,
       NestedSet<Artifact> files,
       PythonVersion pythonVersion,
-      @Nullable String stubShebang) {
+      @Nullable String stubShebang,
+      @Nullable Artifact bootstrapTemplate) {
     return new PyRuntimeInfo(
         /*location=*/ null,
         /*interpreterPath=*/ null,
         interpreter,
         Depset.of(Artifact.TYPE, files),
         pythonVersion,
-        stubShebang);
+        stubShebang,
+        bootstrapTemplate);
   }
 
   /** Constructs an instance from native rule logic (built-in location) for a platform runtime. */
   public static PyRuntimeInfo createForPlatformRuntime(
-      PathFragment interpreterPath, PythonVersion pythonVersion, @Nullable String stubShebang) {
+      PathFragment interpreterPath,
+      PythonVersion pythonVersion,
+      @Nullable String stubShebang,
+      @Nullable Artifact bootstrapTemplate) {
     return new PyRuntimeInfo(
         /*location=*/ null,
         interpreterPath,
         /*interpreter=*/ null,
         /*files=*/ null,
         pythonVersion,
-        stubShebang);
+        stubShebang,
+        bootstrapTemplate);
   }
 
   @Override
@@ -176,6 +186,12 @@ public final class PyRuntimeInfo implements Info, PyRuntimeInfoApi<Artifact> {
     return stubShebang;
   }
 
+  @Override
+  @Nullable
+  public Artifact getBootstrapTemplate() {
+    return bootstrapTemplate;
+  }
+
   @Nullable
   public NestedSet<Artifact> getFiles() {
     try {
@@ -215,11 +231,22 @@ public final class PyRuntimeInfo implements Info, PyRuntimeInfoApi<Artifact> {
         Object filesUncast,
         String pythonVersion,
         String stubShebang,
+        Object bootstrapTemplateUncast,
         StarlarkThread thread)
         throws EvalException {
       String interpreterPath =
           interpreterPathUncast == NONE ? null : (String) interpreterPathUncast;
       Artifact interpreter = interpreterUncast == NONE ? null : (Artifact) interpreterUncast;
+      Artifact bootstrapTemplate = null;
+      if (bootstrapTemplateUncast != NONE) {
+        if (bootstrapTemplateUncast instanceof InputFileConfiguredTarget) {
+          InputFileConfiguredTarget bootstrapTarget = (InputFileConfiguredTarget) bootstrapTemplateUncast;
+          bootstrapTemplate = bootstrapTarget.getArtifact();
+        } else if (bootstrapTemplateUncast instanceof Artifact) {
+          // SourceArtifact, possibly only in tests?
+          bootstrapTemplate = (Artifact) bootstrapTemplateUncast;
+        }
+      }
       Depset filesDepset = null;
       if (filesUncast != NONE) {
         // Validate type of filesDepset.
@@ -254,7 +281,8 @@ public final class PyRuntimeInfo implements Info, PyRuntimeInfoApi<Artifact> {
             interpreter,
             filesDepset,
             parsedPythonVersion,
-            stubShebang);
+            stubShebang,
+            bootstrapTemplate);
       } else {
         return new PyRuntimeInfo(
             loc,
@@ -262,7 +290,8 @@ public final class PyRuntimeInfo implements Info, PyRuntimeInfoApi<Artifact> {
             /*interpreter=*/ null,
             /*files=*/ null,
             parsedPythonVersion,
-            stubShebang);
+            stubShebang,
+            bootstrapTemplate);
       }
     }
   }

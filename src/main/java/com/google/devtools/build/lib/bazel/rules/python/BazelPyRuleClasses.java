@@ -40,6 +40,7 @@ import com.google.devtools.build.lib.rules.python.PyInfo;
 import com.google.devtools.build.lib.rules.python.PyRuleClasses;
 import com.google.devtools.build.lib.rules.python.PyStructUtils;
 import com.google.devtools.build.lib.rules.python.PythonVersion;
+import com.google.devtools.build.lib.rules.python.PyRuntimeInfo;
 
 /**
  * Bazel-specific rule definitions for Python rules.
@@ -241,6 +242,11 @@ public final class BazelPyRuleClasses {
           .add(
               attr("$py_toolchain_type", NODEP_LABEL)
                   .value(env.getToolsLabel("//tools/python:toolchain_type")))
+          /* Only used when no py_runtime() is available. See #7901
+          */
+          .add(
+              attr("$default_bootstrap_template", LABEL)
+                  .value(env.getToolsLabel(PyRuntimeInfo.DEFAULT_BOOTSTRAP_TEMPLATE)))
           .addRequiredToolchains(env.getToolsLabel("//tools/python:toolchain_type"))
           .useToolchainTransition(ToolchainTransitionMode.ENABLED)
           .build();

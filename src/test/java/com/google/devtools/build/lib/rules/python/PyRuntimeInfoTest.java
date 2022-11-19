@@ -58,7 +58,7 @@ public class PyRuntimeInfoTest extends BuildViewTestCase {
   public void factoryMethod_InBuildRuntime() throws Exception {
     NestedSet<Artifact> files = NestedSetBuilder.create(Order.STABLE_ORDER, dummyFile);
     PyRuntimeInfo inBuildRuntime =
-        PyRuntimeInfo.createForInBuildRuntime(dummyInterpreter, files, PythonVersion.PY2, null);
+        PyRuntimeInfo.createForInBuildRuntime(dummyInterpreter, files, PythonVersion.PY2, null, dummyFile);
 
     assertThat(inBuildRuntime.getCreationLocation()).isEqualTo(Location.BUILTIN);
     assertThat(inBuildRuntime.getInterpreterPath()).isNull();
@@ -75,7 +75,7 @@ public class PyRuntimeInfoTest extends BuildViewTestCase {
   public void factoryMethod_PlatformRuntime() {
     PathFragment path = PathFragment.create("/system/interpreter");
     PyRuntimeInfo platformRuntime =
-        PyRuntimeInfo.createForPlatformRuntime(path, PythonVersion.PY2, null);
+        PyRuntimeInfo.createForPlatformRuntime(path, PythonVersion.PY2, null, dummyFile);
 
     assertThat(platformRuntime.getCreationLocation()).isEqualTo(Location.BUILTIN);
     assertThat(platformRuntime.getInterpreterPath()).isEqualTo(path);
@@ -95,6 +95,7 @@ public class PyRuntimeInfoTest extends BuildViewTestCase {
         "    interpreter = dummy_interpreter,",
         "    files = depset([dummy_file]),",
         "    python_version = 'PY2',",
+        "    bootstrap_template = dummy_file,",
         ")");
     PyRuntimeInfo info = (PyRuntimeInfo) ev.lookup("info");
     assertThat(info.getCreationLocation().toString()).isEqualTo(":1:21");
@@ -103,6 +104,7 @@ public class PyRuntimeInfoTest extends BuildViewTestCase {
     assertHasOrderAndContainsExactly(info.getFiles(), Order.STABLE_ORDER, dummyFile);
     assertThat(info.getPythonVersion()).isEqualTo(PythonVersion.PY2);
     assertThat(info.getStubShebang()).isEqualTo(PyRuntimeInfo.DEFAULT_STUB_SHEBANG);
+    assertThat(info.getBootstrapTemplate()).isEqualTo(dummyFile);
   }
 
   @Test
@@ -111,6 +113,7 @@ public class PyRuntimeInfoTest extends BuildViewTestCase {
         "info = PyRuntimeInfo(", //
         "    interpreter_path = '/system/interpreter',",
         "    python_version = 'PY2',",
+        "    bootstrap_template = dummy_file,",
         ")");
     PyRuntimeInfo info = (PyRuntimeInfo) ev.lookup("info");
     assertThat(info.getCreationLocation().toString()).isEqualTo(":1:21");
@@ -128,6 +131,7 @@ public class PyRuntimeInfoTest extends BuildViewTestCase {
         "    interpreter_path = '/system/interpreter',",
         "    python_version = 'PY2',",
         "    stub_shebang = '#!/usr/bin/custom',",
+        "    bootstrap_template = dummy_file,",
         ")");
     PyRuntimeInfo info = (PyRuntimeInfo) ev.lookup("info");
     assertThat(info.getStubShebang()).isEqualTo("#!/usr/bin/custom");
@@ -139,6 +143,7 @@ public class PyRuntimeInfoTest extends BuildViewTestCase {
         "info = PyRuntimeInfo(", //
         "    interpreter = dummy_interpreter,",
         "    python_version = 'PY2',",
+        "    bootstrap_template = dummy_file,",
         ")");
     PyRuntimeInfo info = (PyRuntimeInfo) ev.lookup("info");
     assertHasOrderAndContainsExactly(info.getFiles(), Order.STABLE_ORDER);
