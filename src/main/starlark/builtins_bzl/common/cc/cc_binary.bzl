@@ -337,6 +337,7 @@ def _separate_static_and_dynamic_link_libraries(direct_children, can_be_linked_d
     link_statically_labels = {}
     link_dynamically_labels = {}
     all_children = list(direct_children)
+    dynamic_children = []
     seen_labels = {}
 
     # Some of the logic here is a duplicate from cc_shared_library.
@@ -351,9 +352,26 @@ def _separate_static_and_dynamic_link_libraries(direct_children, can_be_linked_d
         seen_labels[node_label] = True
         if node_label in can_be_linked_dynamically:
             link_dynamically_labels[node_label] = True
+            dynamic_children.extend(node.children)
         else:
             link_statically_labels[node_label] = True
             all_children.extend(node.children)
+
+    # Now find all dynamic nodes that are indirect dependencies as well.
+    for i in range(2147483647):
+        if i == len(dynamic_children):
+            break
+
+        node = dynamic_children[i]
+        node_label = str(node.label)
+        if node_label in seen_labels:
+            continue
+        seen_labels[node_label] = True
+
+        dynamic_children.extend(node.children)
+        if node_label in can_be_linked_dynamically:
+            link_dynamically_labels[node_label] = True
+
     return (link_statically_labels, link_dynamically_labels)
 
 def _get_preloaded_deps_from_dynamic_deps(ctx):
@@ -398,6 +416,8 @@ def _filter_libraries_that_are_linked_dynamically(ctx, cc_linking_context, cpp_c
                 linked_statically_but_not_exported.setdefault(link_once_static_libs_map[owner], []).append(owner)
             else:
                 static_linker_inputs.append(linker_input)
+        elif owner not in link_dynamically_labels:
+            static_linker_inputs.append(linker_input)
 
     throw_linked_but_not_exported_errors(linked_statically_but_not_exported)
 
