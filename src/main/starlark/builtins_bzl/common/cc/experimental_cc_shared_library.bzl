@@ -70,6 +70,7 @@ def _separate_static_and_dynamic_link_libraries(
     ):
     node = None
     all_children = list(direct_children)
+    dynamic_children = []
     link_statically_labels = {}
     link_dynamically_labels = {}
 
@@ -88,15 +89,52 @@ def _separate_static_and_dynamic_link_libraries(
 
         if node_label in can_be_linked_dynamically:
             link_dynamically_labels[node_label] = True
+            dynamic_children.extend(node.children)
         elif node_label not in preloaded_deps_direct_labels:
             link_statically_labels[node_label] = node.linkable_more_than_once
             all_children.extend(node.children)
 
+    # Now find all dynamic nodes that are indirect dependencies as well.
+    for i in range(2147483647):
+        if i == len(dynamic_children):
+            break
+
+        node = dynamic_children[i]
+        node_label = str(node.label)
+        if node_label in seen_labels:
+            continue
+        seen_labels[node_label] = True
+
+        if node_label in can_be_linked_dynamically:
+            link_dynamically_labels[node_label] = True
+        dynamic_children.extend(node.children)
+
     return (link_statically_labels, link_dynamically_labels)
 
-def _create_linker_context(ctx, linker_inputs):
+def _create_linker_context(ctx, dependency_linker_inputs, exports_map, linker_inputs, cc_toolchain, feature_configuration):
+    transitive_linker_inputs = []
+    linker_inputs_seen = {}
+    for linker_input in dependency_linker_inputs:
+        if not (linker_input.user_link_flags or linker_input.owner in exports_map):
+            continue
+
+        stringified_linker_input = cc_helper.stringify_linker_input(linker_input)
+        if stringified_linker_input in linker_inputs_seen:
+            continue
+        linker_inputs_seen[stringified_linker_input] = True
+
+        new_linker_input = cc_common.create_linker_input(
+            owner = linker_input.owner,
+            user_link_flags = linker_input.user_link_flags,
+            additional_inputs = depset(linker_input.additional_inputs),
+        )
+        stringified_linker_input = cc_helper.stringify_linker_input(new_linker_input)
+        if stringified_linker_input in linker_inputs_seen:
+            continue
+        linker_inputs_seen[stringified_linker_input] = True
+        transitive_linker_inputs.append(new_linker_input)
     return cc_common.create_linking_context(
-        linker_inputs = depset(linker_inputs, order = "topological"),
+        linker_inputs = depset(linker_inputs, transitive = [depset(transitive_linker_inputs)], order = "topological"),
     )
 
 def _merge_cc_shared_library_infos(ctx):
@@ -116,11 +154,11 @@ def _merge_cc_shared_library_infos(ctx):
         dynamic_deps.append(dynamic_dep_entry)
         transitive_dynamic_deps.append(dep[CcSharedLibraryInfo].dynamic_deps)
 
-    return depset(direct = dynamic_deps, transitive = transitive_dynamic_deps)
+    return depset(direct = dynamic_deps, transitive = transitive_dynamic_deps).to_list()
 
 def _build_exports_map_from_only_dynamic_deps(merged_shared_library_infos):
     exports_map = {}
-    for entry in merged_shared_library_infos.to_list():
+    for entry in merged_shared_library_infos:
         exports = entry[0]
         linker_input = entry[1]
         for export in exports:
@@ -135,7 +173,7 @@ def _build_exports_map_from_only_dynamic_deps(merged_shared_library_infos):
 
 def _build_link_once_static_libs_map(merged_shared_library_infos):
     link_once_static_libs_map = {}
-    for entry in merged_shared_library_infos.to_list():
+    for entry in merged_shared_library_infos:
         link_once_static_libs = entry[2]
         linker_input = entry[1]
         for static_lib in link_once_static_libs:
@@ -239,17 +277,16 @@ def _filter_inputs(
         feature_configuration,
         cc_toolchain,
         transitive_exports,
+        dependency_linker_inputs,
         preloaded_deps_direct_labels,
         link_once_static_libs_map):
     linker_inputs = []
     curr_link_once_static_libs_map = {}
 
     graph_structure_aspect_nodes = []
-    dependency_linker_inputs = []
     direct_exports = {}
     for export in ctx.attr.roots:
         direct_exports[str(export.label)] = True
-        dependency_linker_inputs.extend(export[CcInfo].linking_context.linker_inputs.to_list())
         graph_structure_aspect_nodes.append(export[GraphNodeInfo])
 
     can_be_linked_dynamically = {}
@@ -268,7 +305,6 @@ def _filter_inputs(
     # Bug Patch: Assume linker inputs that are not in the dynamic or static labels are pulled in statically. 
     for linker_input in dependency_linker_inputs:
         if str(linker_input.owner) not in link_dynamically_labels and str(linker_input.owner) not in link_statically_labels and str(linker_input.owner).endswith(".upb"):
-            # print("WARNING: ", str(linker_input.owner), " is not caught by the GraphNodeInfo Aspect")
             link_statically_labels[str(linker_input.owner)] = True
 
     precompiled_only_dynamic_libraries = []
@@ -458,16 +494,20 @@ def _cc_shared_library_impl(ctx):
 
     link_once_static_libs_map = _build_link_once_static_libs_map(merged_cc_shared_library_info)
 
+    dependency_linker_inputs = []
+    for export in ctx.attr.roots:
+        dependency_linker_inputs.extend(export[CcInfo].linking_context.linker_inputs.to_list())
     (exports, linker_inputs, link_once_static_libs, precompiled_only_dynamic_libraries) = _filter_inputs(
         ctx,
         feature_configuration,
         cc_toolchain,
         exports_map,
+        dependency_linker_inputs,
         preloaded_deps_direct_labels,
         link_once_static_libs_map,
     )
 
-    linking_context = _create_linker_context(ctx, linker_inputs)
+    linking_context = _create_linker_context(ctx, dependency_linker_inputs, exports_map, linker_inputs, cc_toolchain, feature_configuration)
 
     user_link_flags = []
     for user_link_flag in ctx.attr.user_link_flags:
@@ -479,22 +519,24 @@ def _cc_shared_library_impl(ctx):
 
     win_def_file = None
     if cc_common.is_enabled(feature_configuration = feature_configuration, feature_name = "targets_windows"):
-        object_files = []
-        for linker_input in linking_context.linker_inputs.to_list():
-            for library in linker_input.libraries:
-                if library.pic_static_library != None:
-                    if library.pic_objects != None:
-                        object_files.extend(library.pic_objects)
-                elif library.static_library != None:
-                    if library.objects != None:
-                        object_files.extend(library.objects)
 
         def_parser = ctx.file._def_parser
+        custom_win_def_file = ctx.file.win_def_file
 
         generated_def_file = None
-        if def_parser != None:
+        if def_parser != None and not custom_win_def_file:
+            object_files = []
+            for linker_input in linker_inputs:
+                for library in linker_input.libraries:
+                    if library.pic_static_library != None:
+                        if library.pic_objects != None:
+                            object_files.extend(library.pic_objects)
+                    elif library.static_library != None:
+                        if library.objects != None:
+                            object_files.extend(library.objects)
+
             generated_def_file = cc_helper.generate_def_file(ctx, def_parser, object_files, ctx.label.name)
-        custom_win_def_file = ctx.file.win_def_file
+
         win_def_file = cc_helper.get_windows_def_file_for_linking(ctx, custom_win_def_file, generated_def_file, feature_configuration)
 
     additional_inputs = []
@@ -525,10 +567,10 @@ def _cc_shared_library_impl(ctx):
     runfiles = ctx.runfiles(
         files = runfiles_files,
     )
-    transitive_debug_files = []
+    transitive_runfiles = []
     for dep in ctx.attr.dynamic_deps:
-        runfiles = runfiles.merge(dep[DefaultInfo].data_runfiles)
-        transitive_debug_files.append(dep[OutputGroupInfo].rule_impl_debug_files)
+        transitive_runfiles.append(dep[DefaultInfo].data_runfiles)
+    runfiles = runfiles.merge_all(transitive_runfiles)
 
     precompiled_only_dynamic_libraries_runfiles = []
     for precompiled_dynamic_library in precompiled_only_dynamic_libraries:
@@ -580,7 +622,7 @@ def _cc_shared_library_impl(ctx):
             rule_impl_debug_files = depset(direct = debug_files, transitive = transitive_debug_files),
         ),
         CcSharedLibraryInfo(
-            dynamic_deps = merged_cc_shared_library_info,
+            dynamic_deps = depset(merged_cc_shared_library_info),
             exports = exports.keys(),
             link_once_static_libs = link_once_static_libs,
             linker_input = cc_common.create_linker_input(

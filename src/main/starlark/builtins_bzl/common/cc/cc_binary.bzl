@@ -337,6 +337,7 @@ def _separate_static_and_dynamic_link_libraries(direct_children, can_be_linked_d
     link_statically_labels = {}
     link_dynamically_labels = {}
     all_children = list(direct_children)
+    dynamic_children = []
     seen_labels = {}
 
     # Some of the logic here is a duplicate from cc_shared_library.
@@ -351,9 +352,26 @@ def _separate_static_and_dynamic_link_libraries(direct_children, can_be_linked_d
         seen_labels[node_label] = True
         if node_label in can_be_linked_dynamically:
             link_dynamically_labels[node_label] = True
+            dynamic_children.extend(node.children)
         else:
             link_statically_labels[node_label] = True
             all_children.extend(node.children)
+
+    # Now find all dynamic nodes that are indirect dependencies as well.
+    for i in range(2147483647):
+        if i == len(dynamic_children):
+            break
+
+        node = dynamic_children[i]
+        node_label = str(node.label)
+        if node_label in seen_labels:
+            continue
+        seen_labels[node_label] = True
+
+        dynamic_children.extend(node.children)
+        if node_label in can_be_linked_dynamically:
+            link_dynamically_labels[node_label] = True
+
     return (link_statically_labels, link_dynamically_labels)
 
 def _get_preloaded_deps_from_dynamic_deps(ctx):
@@ -404,6 +422,8 @@ def _filter_libraries_that_are_linked_dynamically(ctx, cc_linking_context, cpp_c
                 linked_statically_but_not_exported.setdefault(link_once_static_libs_map[owner], []).append(owner)
             else:
                 static_linker_inputs.append(linker_input)
+        elif owner not in link_dynamically_labels:
+            static_linker_inputs.append(linker_input)
 
     throw_linked_but_not_exported_errors(linked_statically_but_not_exported)
 
@@ -532,7 +552,7 @@ def _create_transitive_linking_actions(
         win_def_file = win_def_file,
     )
     cc_launcher_info = cc_internal.create_cc_launcher_info(cc_info = cc_info_without_extra_link_time_libraries, compilation_outputs = cc_compilation_outputs_with_only_objects)
-    return (cc_linking_outputs, cc_launcher_info, rule_impl_debug_files)
+    return (cc_linking_outputs, cc_launcher_info, cc_linking_context, rule_impl_debug_files)
 
 def _use_pic(ctx, cc_toolchain, cpp_config, feature_configuration):
     if _is_link_shared(ctx):
@@ -741,7 +761,7 @@ def cc_binary_impl(ctx, additional_linkopts):
     if extra_link_time_libraries != None:
         linker_inputs_extra, runtime_libraries_extra = extra_link_time_libraries.build_libraries(ctx = ctx, static_mode = linking_mode != _LINKING_DYNAMIC, for_dynamic_library = _is_link_shared(ctx))
 
-    cc_linking_outputs_binary, cc_launcher_info, rule_impl_debug_files = _create_transitive_linking_actions(
+    cc_linking_outputs_binary, cc_launcher_info, cc_linking_context, rule_impl_debug_files = _create_transitive_linking_actions(
         ctx,
         cc_toolchain,
         feature_configuration,
@@ -803,7 +823,7 @@ def cc_binary_impl(ctx, additional_linkopts):
     # all the dynamic libraries we need at runtime. Then copy these libraries next to the binary.
     copied_runtime_dynamic_libraries = None
     if cc_common.is_enabled(feature_configuration = feature_configuration, feature_name = "copy_dynamic_libraries_to_binary"):
-        linker_inputs = deps_cc_linking_context.linker_inputs.to_list()
+        linker_inputs = cc_linking_context.linker_inputs.to_list()
         libraries = []
         for linker_input in linker_inputs:
             libraries.extend(linker_input.libraries)
