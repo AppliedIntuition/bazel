@@ -601,7 +601,8 @@ def _cc_shared_library_impl(ctx):
     transitive_debug_files = []
     for dep in ctx.attr.dynamic_deps:
         transitive_runfiles.append(dep[DefaultInfo].data_runfiles)
-        transitive_debug_files.append(dep[OutputGroupInfo].rule_impl_debug_files)
+        if transitive_debug_files.hasattr("rule_impl_debug_files"):
+            transitive_debug_files.append(dep[OutputGroupInfo].rule_impl_debug_files)
     runfiles = runfiles.merge_all(transitive_runfiles)
 
     precompiled_only_dynamic_libraries_runfiles = []
