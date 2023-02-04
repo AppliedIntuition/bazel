@@ -572,11 +572,13 @@ def _cc_shared_library_impl(ctx):
     transitive_debug_files = []
     for dep in ctx.attr.dynamic_deps:
         transitive_runfiles.append(dep[DefaultInfo].data_runfiles)
-        if transitive_debug_files.hasattr("rule_impl_debug_files"):
+        # For some reason, this attribute does not always exist. It isn't clear why.
+        if hasattr(dep[OutputGroupInfo], "rule_impl_debug_files"):
             transitive_debug_files.append(dep[OutputGroupInfo].rule_impl_debug_files)
     runfiles = runfiles.merge_all(transitive_runfiles)
 
     precompiled_only_dynamic_libraries_runfiles = []
+
     for precompiled_dynamic_library in precompiled_only_dynamic_libraries:
         # precompiled_dynamic_library.dynamic_library could be None if the library to link just contains
         # an interface library which is valid if the actual library is obtained from the system.
@@ -614,7 +616,10 @@ def _cc_shared_library_impl(ctx):
         interface_library.append(linking_outputs.library_to_link.interface_library)
     else:
         interface_library = library
-
+    linker_input = cc_common.create_linker_input(
+        owner = ctx.label,
+        libraries = depset([linking_outputs.library_to_link] + precompiled_only_dynamic_libraries),
+    )
     return [
         DefaultInfo(
             files = depset(library),
@@ -629,10 +634,7 @@ def _cc_shared_library_impl(ctx):
             dynamic_deps = depset(merged_cc_shared_library_info),
             exports = exports.keys(),
             link_once_static_libs = link_once_static_libs,
-            linker_input = cc_common.create_linker_input(
-                owner = ctx.label,
-                libraries = depset([linking_outputs.library_to_link] + precompiled_only_dynamic_libraries),
-            ),
+            linker_input = linker_input,
             preloaded_deps = preloaded_dep_merged_cc_info,
         ),
     ]
