@@ -344,7 +344,7 @@ def ExecuteFile(python_program, main_filename, args, env, module_space,
                                coverage_entrypoint, workspace)
   else:
     ret_code = subprocess.call(
-      [python_program, main_filename] + args,
+      [python_program, '-S', main_filename] + args,
       env=env,
       cwd=workspace
     )
