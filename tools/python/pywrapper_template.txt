@@ -89,4 +89,4 @@ on the command line or adding it to your bazelrc."
   fi
 fi
 
-exec "$PYTHON_BIN" "$@"
+exec "$PYTHON_BIN" "-S" "$@"
