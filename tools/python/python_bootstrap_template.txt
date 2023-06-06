@@ -512,6 +512,7 @@ def Main():
   else:
     cov_tool = None
 
+  new_env['PYTHON_EXE'] = sys.executable
   new_env.update((key, val) for key, val in os.environ.items() if key not in new_env)
 
   workspace = None
