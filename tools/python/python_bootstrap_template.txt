@@ -107,6 +107,8 @@ def FindCoverageEntryPoint(module_space):
 
 def FindBinary(module_space, bin_name):
   """Finds the real binary if it's not a normal absolute path."""
+  if sys.platform == "win32":
+    return sys.executable
   if not bin_name:
     return None
   if bin_name.startswith("//"):
@@ -128,6 +130,23 @@ def FindBinary(module_space, bin_name):
 def CreatePythonPathEntries(python_imports, module_space):
   parts = python_imports.split(':')
   return [module_space] + ['%s/%s' % (module_space, path) for path in parts]
+
+def FindModuleSpaceWindows():
+  stub_filename = sys.argv[0]
+
+  if not os.path.isabs(stub_filename):
+    stub_filename = os.path.join(os.getcwd(), stub_filename)
+  stub_dirname = os.path.dirname(stub_filename)
+  while True:
+    module_space = stub_filename + '.runfiles'
+    if os.path.isdir(module_space):
+      return module_space
+    if os.path.dirname(stub_dirname) == stub_dirname:
+      raise AssertionError('Cannot find src directory for %s' % sys.argv[0])
+    if os.path.basename(stub_dirname) == "src" or ".runfiles" in os.path.basename(stub_dirname):
+      return stub_dirname
+    else:
+      stub_dirname = os.path.dirname(stub_dirname)
 
 def FindModuleSpace(main_rel_path):
   """Finds the runfiles tree."""
@@ -204,9 +223,16 @@ def CreateModuleSpace():
   ExtractZip(os.path.dirname(__file__), temp_dir)
   return os.path.join(temp_dir, 'runfiles')
 
+PYTHON_WINDOWS_DIRNAME = "python_windows"
 # Returns repository roots to add to the import path.
 def GetRepositoriesImports(module_space, import_all):
   if import_all:
+    rel_repo_dirnames = os.listdir(module_space)
+    # Add directories that contain the standard Python library files
+    if PYTHON_WINDOWS_DIRNAME in rel_repo_dirnames:
+      rel_repo_dirnames.append(os.path.join(PYTHON_WINDOWS_DIRNAME, "DLLs"))
+      rel_repo_dirnames.append(os.path.join(PYTHON_WINDOWS_DIRNAME, "Lib"))
+
     repo_dirs = [os.path.join(module_space, d) for d in os.listdir(module_space)]
     repo_dirs.sort()
     return [d for d in repo_dirs if os.path.isdir(d)]
@@ -438,6 +464,8 @@ def Main():
 
   if IsRunningFromZip():
     module_space = CreateModuleSpace()
+  elif IsWindows():
+    module_space = FindModuleSpaceWindows()
   else:
     module_space = FindModuleSpace(main_rel_path)
 
