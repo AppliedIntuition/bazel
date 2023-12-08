@@ -169,7 +169,7 @@ def CreateModuleSpace():
   ExtractZip(os.path.dirname(__file__), temp_dir)
   return os.path.join(temp_dir, "runfiles")
 
-PYTHON_WINDOWS_DIRNAME = "python_windows"
+PYTHON_WINDOWS_DIRNAME = "python_windows_39"
 # Returns repository roots to add to the import path.
 def GetRepositoriesImports(module_space, import_all):
   if import_all:
