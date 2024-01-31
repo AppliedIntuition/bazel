@@ -323,8 +323,8 @@ def _filter_inputs(
 
     # Bug Patch: Assume linker inputs that are not in the dynamic or static labels are pulled in statically. 
     for linker_input in dependency_linker_inputs:
-        if str(linker_input.owner) not in link_dynamically_labels and str(linker_input.owner) not in link_statically_labels and str(linker_input.owner).endswith(".upb"):
-            link_statically_labels[str(linker_input.owner)] = True
+        if str(linker_input.owner) not in targets_to_be_linked_dynamically_set and str(linker_input.owner) not in targets_to_be_linked_statically_map and str(linker_input.owner).endswith(".upb"):
+            targets_to_be_linked_statically_map[str(linker_input.owner)] = True
 
     precompiled_only_dynamic_libraries = []
     exports = {}
