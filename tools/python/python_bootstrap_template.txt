@@ -179,7 +179,8 @@ def GetRepositoriesImports(module_space, import_all):
       rel_repo_dirnames.append(os.path.join(PYTHON_WINDOWS_DIRNAME, "DLLs"))
       rel_repo_dirnames.append(os.path.join(PYTHON_WINDOWS_DIRNAME, "Lib"))
 
-    repo_dirs = [os.path.join(module_space, d) for d in rel_repo_dirnames]
+    repo_dirs = [os.path.join(module_space, d, "site-packages") for d in rel_repo_dirnames]
+    repo_dirs += [os.path.join(module_space, d) for d in rel_repo_dirnames]
     return [d for d in repo_dirs if os.path.isdir(d)]
   return [os.path.join(module_space, "%workspace_name%")]
 
