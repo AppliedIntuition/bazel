@@ -1,5 +1,7 @@
-build --cxxopt=-std=c++14
-build --host_cxxopt=-std=c++14
+build --action_env=BAZEL_CXXOPTS="-std=c++17"
+
+build:linux --cxxopt=-std=c++17
+build:linux --host_cxxopt=-std=c++17
 
 common --enable_platform_specific_config
 
