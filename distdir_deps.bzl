@@ -31,6 +31,8 @@ DIST_DEPS = {
             "https://mirror.bazel.build/github.com/bazelbuild/platforms/releases/download/0.0.5/platforms-0.0.5.tar.gz",
             "https://github.com/bazelbuild/platforms/releases/download/0.0.5/platforms-0.0.5.tar.gz",
         ],
+        "patch_args": ["-p1"],
+        "patches": ["//third_party/platforms:emscripten.patch"],
         "used_in": [
             "additional_distfiles",
             "test_WORKSPACE_files",
