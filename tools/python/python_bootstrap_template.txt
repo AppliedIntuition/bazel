@@ -179,8 +179,15 @@ def GetRepositoriesImports(module_space, import_all):
       rel_repo_dirnames.append(os.path.join(PYTHON_WINDOWS_DIRNAME, "DLLs"))
       rel_repo_dirnames.append(os.path.join(PYTHON_WINDOWS_DIRNAME, "Lib"))
 
-    repo_dirs = [os.path.join(module_space, d) for d in rel_repo_dirnames]
-    return [d for d in repo_dirs if os.path.isdir(d)]
+    repo_dirs = []
+    for d in rel_repo_dirnames:
+      repo_dir = os.path.join(module_space, d)
+      site_packages_dir = os.path.join(repo_dir, "site-packages")
+      if os.path.isdir(site_packages_dir):
+        repo_dirs.append(site_packages_dir)
+      if "pipdeps" not in site_packages_dir and os.path.isdir(repo_dir):
+        repo_dirs.append(repo_dir)
+    return repo_dirs
   return [os.path.join(module_space, "%workspace_name%")]
 
 # Finds the runfiles manifest or the runfiles directory.
