@@ -393,7 +393,12 @@ def _filter_libraries_that_are_linked_dynamically(ctx, feature_configuration, cc
     # Unlike Unix on Windows every dynamic dependency must be linked to the
     # main binary, even indirect ones that are dependencies of direct
     # dynamic dependencies of this binary.
-    link_indirect_deps = cc_common.is_enabled(feature_configuration = feature_configuration, feature_name = "targets_windows")
+    # Applied Patch: We force all transitive (indirect) dynamic dependencies to be
+    # linked instead of just the direct dynamic deps. Note that this does
+    # not take into account implementation_deps here and all deps are included.
+    # This is essentially working around https://github.com/bazelbuild/bazel/issues/21819
+    # which has more details of the underlying issue.
+    link_indirect_deps = True # cc_common.is_enabled(feature_configuration = feature_configuration, feature_name = "targets_windows")
     linker_inputs_count += add_unused_dynamic_deps(ctx, unused_dynamic_linker_inputs, _add_linker_input_to_dict, topologically_sorted_labels, link_indirect_deps)
 
     throw_linked_but_not_exported_errors(linked_statically_but_not_exported)

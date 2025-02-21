@@ -519,7 +519,12 @@ def _filter_inputs(
             message += dynamic_only_root + "\n"
         fail(message)
 
-    linker_inputs_count += _add_unused_dynamic_deps(ctx, unused_dynamic_linker_inputs, _add_linker_input_to_dict, topologically_sorted_labels, link_indirect_deps = False)
+    # Applied Patch: We force all transitive (indirect) dynamic dependencies to be
+    # linked instead of just the direct dynamic deps. Note that this does
+    # not take into account implementation_deps here and all deps are included.
+    # This is essentially working around https://github.com/bazelbuild/bazel/issues/21819
+    # which has more details of the underlying issue.
+    linker_inputs_count += _add_unused_dynamic_deps(ctx, unused_dynamic_linker_inputs, _add_linker_input_to_dict, topologically_sorted_labels, link_indirect_deps = True)
 
     if ctx.attr.experimental_disable_topo_sort_do_not_use_remove_before_7_0:
         linker_inputs = experimental_remove_before_7_0_linker_inputs
