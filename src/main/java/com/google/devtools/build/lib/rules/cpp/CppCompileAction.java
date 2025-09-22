@@ -31,6 +31,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.io.ByteStreams;
+import com.google.common.flogger.GoogleLogger;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.devtools.build.lib.actions.AbstractAction;
 import com.google.devtools.build.lib.actions.ActionContinuationOrResult;
@@ -109,6 +110,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -120,7 +122,7 @@ import net.starlark.java.eval.StarlarkList;
 /** Action that represents some kind of C++ compilation step. */
 @ThreadCompatible
 public class CppCompileAction extends AbstractAction implements IncludeScannable, CommandAction {
-
+  private static final GoogleLogger logger = GoogleLogger.forEnclosingClass();
   private static final PathFragment BUILD_PATH_FRAGMENT = PathFragment.create("BUILD");
 
   private static final boolean VALIDATION_DEBUG_WARN = false;
@@ -207,6 +209,9 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
 
   private ParamFileActionInput paramFileActionInput;
   private PathFragment paramFilePath;
+
+  // [Applied Edit]: hold the number of inputs for logging resource estimation metrics
+  private int numInputsCached;
 
   /**
    * Creates a new action to compile C/C++ source files.
@@ -298,6 +303,7 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
     this.useHeaderModules = useHeaderModules;
     this.ccCompilationContext = ccCompilationContext;
     this.builtinIncludeFiles = builtinIncludeFiles;
+    this.numInputsCached = -1;
     this.additionalIncludeScanningRoots =
         Preconditions.checkNotNull(additionalIncludeScanningRoots);
     this.compileCommandLine =
@@ -1343,8 +1349,11 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
         switch (os) {
           case DARWIN:
           case LINUX:
+            // [APPLIED EDIT] Modify the estimated RAM for a compile action.
+            // This is calculated identically to the above comment where 95% of actions use
+            // less than the estimate, but using our own internal data.
             return ResourceSet.createWithRamCpu(
-                /* memoryMb= */ 80 + 0.7 * inputs, /* cpuUsage= */ 1);
+                /* memoryMb= */ 1540 + 0.48 * inputs, /* cpuUsage= */ 1);
           default:
             return AbstractAction.DEFAULT_RESOURCE_SET;
         }
@@ -1512,7 +1521,8 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
         spawnContext,
         showIncludesFilterForStdout,
         showIncludesFilterForStderr,
-        spawnContinuation);
+        spawnContinuation,
+        this.numInputsCached);
   }
 
   @Nullable
@@ -1574,6 +1584,9 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
           ExecutionRequirements.DIFFERENTIATE_WORKSPACE_CACHE, execRoot.getBaseName());
     }
 
+    this.numInputsCached = inputs.memoizedFlattenAndGetSize();
+
+
     try {
       return new SimpleSpawn(
           this,
@@ -1594,7 +1607,7 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
                   enabledCppCompileResourcesEstimation(),
                   getMnemonic(),
                   OS.getCurrent(),
-                  inputs.memoizedFlattenAndGetSize()));
+                  this.numInputsCached));
     } catch (CommandLineExpansionException e) {
       String message =
           String.format(
@@ -1875,18 +1888,21 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
     private final ShowIncludesFilter showIncludesFilterForStdout;
     private final ShowIncludesFilter showIncludesFilterForStderr;
     private final SpawnContinuation spawnContinuation;
+    private final int numInputs;
 
     CppCompileActionContinuation(
         ActionExecutionContext actionExecutionContext,
         ActionExecutionContext spawnExecutionContext,
         ShowIncludesFilter showIncludesFilterForStdout,
         ShowIncludesFilter showIncludesFilterForStderr,
-        SpawnContinuation spawnContinuation) {
+        SpawnContinuation spawnContinuation,
+        int numInputs) {
       this.actionExecutionContext = actionExecutionContext;
       this.spawnExecutionContext = spawnExecutionContext;
       this.showIncludesFilterForStdout = showIncludesFilterForStdout;
       this.showIncludesFilterForStderr = showIncludesFilterForStderr;
       this.spawnContinuation = spawnContinuation;
+      this.numInputs = numInputs;
     }
 
     @Override
@@ -1907,12 +1923,26 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
               spawnExecutionContext,
               showIncludesFilterForStdout,
               showIncludesFilterForStderr,
-              nextContinuation);
+              nextContinuation,
+              numInputs);
         }
         spawnResults = nextContinuation.get();
         // SpawnActionContext guarantees that the first list entry exists and corresponds to the
         // executed spawn.
-        dotDContents = getDotDContents(spawnResults.get(0));
+        SpawnResult firstSpawn = spawnResults.get(0);
+        if (this.numInputs != -1) {
+          Optional<Long> consumedMemoryInKb = firstSpawn.getMemoryInKb();
+          if (consumedMemoryInKb.isPresent()) {
+            logger.atInfo().log(
+              "[APPLIED EDIT] CppCompile metrics: inputs_count=%d,estimated_mb=%.2f,consumed_mb=%.2f",
+              this.numInputs,
+              80 + 0.7 * this.numInputs,
+              ((double) consumedMemoryInKb.get()) / 1024);
+          } else {
+            logger.atInfo().log("[APPLIED EDIT] No consumed mb data");
+          }
+        }
+        dotDContents = getDotDContents(firstSpawn);
       } catch (ExecException e) {
         copyTempOutErrToActionOutErr();
         throw ActionExecutionException.fromExecException(e, CppCompileAction.this);
