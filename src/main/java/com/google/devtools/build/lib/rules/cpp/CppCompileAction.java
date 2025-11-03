@@ -1248,12 +1248,27 @@ public class CppCompileAction extends AbstractAction implements IncludeScannable
       return AbstractAction.DEFAULT_RESOURCE_SET;
     }
 
+    // [APPLIED EDIT] Modify the estimated RAM for a compile action.
+    // This is calculated identically to the above comment where 95% of actions use
+    // less than the estimate, but using our own internal data.
+    // Additionally, let use set this estimation through an env var.
+    double baselineMemoryMb = 1540;
+    double slopeMemoryMbPerInput = 0.48;
+    String envSetBaselineMemory = System.getenv("BAZEL_CPP_COMPILE_ACTION_BASELINE");
+    if (envSetBaselineMemory != null) {
+      baselineMemoryMb = Double.parseDouble(envSetBaselineMemory);
+    }
+    String envSetSlope = System.getenv("BAZEL_CPP_COMPILE_ACTION_SLOPE");
+    if (envSetSlope != null) {
+      slopeMemoryMbPerInput = Double.parseDouble(envSetSlope);
+    }
+
     switch (mnemonic) {
       case CPP_COMPILE_MNEMONIC:
         switch (os) {
           case DARWIN:
           case LINUX:
-            return ResourceSet.createWithRamCpu(/* memoryMb= */ 80 + 0.7 * inputs, /* cpu= */ 1);
+            return ResourceSet.createWithRamCpu(/* memoryMb= */ baselineMemoryMb + slopeMemoryMbPerInput * inputs, /* cpu= */ 1);
           default:
             return AbstractAction.DEFAULT_RESOURCE_SET;
         }
