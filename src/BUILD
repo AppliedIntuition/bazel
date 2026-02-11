@@ -290,7 +290,9 @@ genrule(
     # In msys, a file path without .exe suffix(say foo), refers to a file with .exe
     # suffix(say foo.exe), if foo.exe exists and foo doesn't. So, on windows, we
     # need to remove bazel.exe first, so that cat to bazel won't fail.
-    cmd = "rm -f $@; cat $(location //src/main/cpp:client) $(location :package-zip" + jdk + ") > $@ && zip -qA $@ && chmod a+x $@",
+    # Note: zip -A may fail on Windows with Git Bash's Info-ZIP when adjusting
+    # offsets for PE executables. Bazel's archive reading code handles this case.
+    cmd = "rm -f $@; cat $(location //src/main/cpp:client) $(location :package-zip" + jdk + ") > $@ && (zip -qA $@ 2>/dev/null || true) && chmod a+x $@",
     executable = 1,
     output_to_bindir = 1,
     visibility = [
