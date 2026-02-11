@@ -1510,6 +1510,23 @@ public class CppActionConfigs {
                         "    }",
                         "  }")));
       }
+      // Feature to enable response files for archive (static library) actions.
+      // This is particularly useful on Windows where command line length is limited.
+      // When enabled, archive actions will use a response file to pass object files
+      // to the archiver (ar/llvm-ar) using the @filename syntax.
+      if (!existingFeatureNames.contains(CppRuleClasses.ARCHIVE_PARAM_FILE)) {
+        featureBuilder.add(getFeature("  name: '" + CppRuleClasses.ARCHIVE_PARAM_FILE + "'"));
+      }
+      // Feature to indicate that only input files should go into the archive param file.
+      // When enabled, the archiver command line will be: tool flags output @params.txt
+      // where params.txt contains only the input object files.
+      // This is needed for llvm-ar and GNU ar which expect the operation (like rcsD)
+      // and archive name on the command line. MSVC lib.exe does not need this feature
+      // as it accepts all arguments in the response file.
+      if (!existingFeatureNames.contains(CppRuleClasses.ONLY_ARCHIVE_INPUTS_IN_PARAM_FILE)) {
+        featureBuilder.add(
+            getFeature("  name: '" + CppRuleClasses.ONLY_ARCHIVE_INPUTS_IN_PARAM_FILE + "'"));
+      }
       if (!existingFeatureNames.contains("compiler_input_flags")) {
         featureBuilder.add(
             getFeature(

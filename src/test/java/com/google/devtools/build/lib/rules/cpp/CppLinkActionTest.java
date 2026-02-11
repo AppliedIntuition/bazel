@@ -153,7 +153,9 @@ public final class CppLinkActionTest extends BuildViewTestCase {
                     "dynamic_library_linker_tool",
                     /* supportsEmbeddedRuntimes= */ true,
                     /* supportsInterfaceSharedLibraries= */ false))
-            .addAll(CppActionConfigs.getFeaturesToAppearLastInFeaturesList(ImmutableSet.of()))
+            .addAll(
+                CppActionConfigs.getFeaturesToAppearLastInFeaturesList(
+                    ImmutableSet.of(CppRuleClasses.ARCHIVE_PARAM_FILE)))
             .add(linkCppStandardLibrary)
             .add(archiveParamFile)
             .build();

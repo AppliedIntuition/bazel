@@ -192,17 +192,31 @@ public final class LinkCommandLine extends CommandLine {
     argv.add(getLinkerPathString());
     try {
       if (paramFile != null) {
-        // Retrieve only reference to linker_param_file from the command line.
-        String linkerParamFile =
-            variables
-                .getVariable(LINKER_PARAM_FILE.getVariableName())
-                .getStringValue(LINKER_PARAM_FILE.getVariableName(), PathMapper.NOOP);
-        argv.addAll(
-            featureConfiguration
-                .getCommandLine(actionName, variables, expander, PathMapper.NOOP)
-                .stream()
-                .filter(s -> s.contains(linkerParamFile))
-                .collect(toImmutableList()));
+        // For archive actions with only_archive_inputs_in_param_file feature enabled,
+        // we need to keep the archiver flags and output on the command line.
+        // Only the input files (libraries_to_link) should go into the param file.
+        if (shouldOnlyPutArchiveInputsInParamFile()) {
+          // Get the command line without libraries_to_link (archiver setup)
+          argv.addAll(getArchiverSetupCommandLine(expander));
+          // Add the param file reference
+          String linkerParamFile =
+              variables
+                  .getVariable(LINKER_PARAM_FILE.getVariableName())
+                  .getStringValue(LINKER_PARAM_FILE.getVariableName(), PathMapper.NOOP);
+          argv.add("@" + linkerParamFile);
+        } else {
+          // Retrieve only reference to linker_param_file from the command line.
+          String linkerParamFile =
+              variables
+                  .getVariable(LINKER_PARAM_FILE.getVariableName())
+                  .getStringValue(LINKER_PARAM_FILE.getVariableName(), PathMapper.NOOP);
+          argv.addAll(
+              featureConfiguration
+                  .getCommandLine(actionName, variables, expander, PathMapper.NOOP)
+                  .stream()
+                  .filter(s -> s.contains(linkerParamFile))
+                  .collect(toImmutableList()));
+        }
       } else {
         argv.addAll(
             featureConfiguration.getCommandLine(actionName, variables, expander, PathMapper.NOOP));
@@ -217,7 +231,11 @@ public final class LinkCommandLine extends CommandLine {
       throws CommandLineExpansionException {
     List<String> argv = new ArrayList<>();
     try {
-      if (variables.isAvailable(LINKER_PARAM_FILE.getVariableName())) {
+      // For archive actions with only_archive_inputs_in_param_file feature enabled,
+      // only put the input files (libraries_to_link) in the param file.
+      if (shouldOnlyPutArchiveInputsInParamFile()) {
+        argv.addAll(getLibrariesToLinkOnlyCommandLine(expander));
+      } else if (variables.isAvailable(LINKER_PARAM_FILE.getVariableName())) {
         // Filter out linker_param_file
         String linkerParamFile =
             variables
@@ -237,6 +255,89 @@ public final class LinkCommandLine extends CommandLine {
       throw new CommandLineExpansionException(e.getMessage());
     }
     return argv;
+  }
+
+  /**
+   * Returns true if this is an archive action that should only put input files in the param file.
+   * This is needed for llvm-ar and GNU ar which expect the operation (like rcsD) and archive name
+   * on the command line, with only object files in the response file.
+   */
+  private boolean shouldOnlyPutArchiveInputsInParamFile() {
+    return paramFile != null
+        && linkTargetType.linkerOrArchiver() == LinkerOrArchiver.ARCHIVER
+        && featureConfiguration != null
+        && featureConfiguration.isEnabled(CppRuleClasses.ONLY_ARCHIVE_INPUTS_IN_PARAM_FILE);
+  }
+
+  /**
+   * Returns the command line arguments for archiver setup (flags and output), excluding the input
+   * files and the param file reference. Input files are identified by their extensions (.o, .obj,
+   * .lo, .pic.o, etc.).
+   */
+  private List<String> getArchiverSetupCommandLine(@Nullable ArtifactExpander expander)
+      throws ExpansionException {
+    List<String> fullCommandLine =
+        featureConfiguration.getCommandLine(actionName, variables, expander, PathMapper.NOOP);
+
+    // Filter out: 1) the param file reference, 2) the input files
+    String linkerParamFile = null;
+    if (variables.isAvailable(LINKER_PARAM_FILE.getVariableName())) {
+      linkerParamFile =
+          variables
+              .getVariable(LINKER_PARAM_FILE.getVariableName())
+              .getStringValue(LINKER_PARAM_FILE.getVariableName(), PathMapper.NOOP);
+    }
+    final String paramFileRef = linkerParamFile;
+
+    List<String> result = new ArrayList<>();
+    for (String arg : fullCommandLine) {
+      // Skip param file reference (we'll add it ourselves)
+      if (paramFileRef != null && arg.contains(paramFileRef)) {
+        continue;
+      }
+      // Skip input files (they go in the param file)
+      if (isObjectFile(arg)) {
+        continue;
+      }
+      result.add(arg);
+    }
+    return result;
+  }
+
+  /**
+   * Returns only the command line arguments that are input files (object files). These are the
+   * files that should go into the param file for archive actions.
+   */
+  private List<String> getLibrariesToLinkOnlyCommandLine(@Nullable ArtifactExpander expander)
+      throws ExpansionException {
+    List<String> fullCommandLine =
+        featureConfiguration.getCommandLine(actionName, variables, expander, PathMapper.NOOP);
+
+    List<String> objectFilesOnly = new ArrayList<>();
+    for (String arg : fullCommandLine) {
+      if (isObjectFile(arg)) {
+        objectFilesOnly.add(arg);
+      }
+    }
+    return objectFilesOnly;
+  }
+
+  /**
+   * Returns true if the argument looks like an object file path. Object files are inputs to the
+   * archiver and should go into the param file. This checks for common object file extensions used
+   * by various compilers and platforms.
+   */
+  private static boolean isObjectFile(String arg) {
+    // Common object file extensions across platforms
+    // .o - Unix/Linux/macOS object files
+    // .obj - Windows object files
+    // .lo - libtool object files
+    // .pic.o - PIC object files in Bazel
+    String lowerArg = arg.toLowerCase();
+    return lowerArg.endsWith(".o")
+        || lowerArg.endsWith(".obj")
+        || lowerArg.endsWith(".lo")
+        || lowerArg.endsWith(".pic.o");
   }
 
   @Override

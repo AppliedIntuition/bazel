@@ -490,6 +490,15 @@ public class CppRuleClasses {
    */
   public static final String ARCHIVE_PARAM_FILE = "archive_param_file";
 
+  /**
+   * A feature to indicate that only input files should be placed in the archive param file. When
+   * enabled, the archiver flags (like rcsD) and output file stay on the command line, while only
+   * the input object files go into the param file. This is needed for llvm-ar and GNU ar which
+   * expect the operation and archive name on the command line. MSVC lib.exe does not need this
+   * since it accepts all arguments in the response file.
+   */
+  public static final String ONLY_ARCHIVE_INPUTS_IN_PARAM_FILE = "only_archive_inputs_in_param_file";
+
   /** A feature to use gcc quoting for linking param files. */
   public static final String GCC_QUOTING_FOR_PARAM_FILES = "gcc_quoting_for_param_files";
 
