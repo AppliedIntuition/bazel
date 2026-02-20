@@ -590,21 +590,8 @@ def Main():
 
   # On Windows, environment variables are limited to 32,767 characters.
   # If PYTHONPATH exceeds our threshold, use a .pth file workaround.
-  # Debug: print PYTHONPATH length
-  if IsWindows():
-    print("[BOOTSTRAP DEBUG] PYTHONPATH length: {}, limit: {}".format(len(python_path), _WINDOWS_PYTHONPATH_LIMIT), file=sys.stderr)
   if IsWindows() and not IsRunningFromZip() and len(python_path) > _WINDOWS_PYTHONPATH_LIMIT:
-    print("[BOOTSTRAP DEBUG] Using .pth file workaround", file=sys.stderr)
-    # Debug: check if workspace directory is in paths
-    workspace_paths = [p for p in python_path_entries if p.endswith('applied') or p.endswith('applied\\') or p.endswith('applied/')]
-    print("[BOOTSTRAP DEBUG] Paths ending with 'applied':", workspace_paths, file=sys.stderr)
-    # Also check for paths containing runfiles\applied or runfiles/applied
-    applied_paths = [p for p in python_path_entries if 'runfiles\\applied' in p.lower() or 'runfiles/applied' in p.lower()]
-    print("[BOOTSTRAP DEBUG] Paths containing runfiles/applied:", len(applied_paths), file=sys.stderr)
-    for p in applied_paths[:3]:
-        print("[BOOTSTRAP DEBUG]   ", p, file=sys.stderr)
     pth_dir, paths_for_sys_path = CreatePthFileForLongPythonpath(python_path_entries)
-    print("[BOOTSTRAP DEBUG] Created pth_dir: {}".format(pth_dir), file=sys.stderr)
     # Set PYTHONPATH to just the .pth directory
     new_env['PYTHONPATH'] = pth_dir
     # Also add paths directly to sys.path since .pth files are only processed
